@@ -99,6 +99,7 @@ def receive_files_handler(job):
         # Run the receive command
         cmd = ["runpodctl", "receive", one_time_code]
         result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+        print(result.stdout)
         
         return {
             "status": "success",
