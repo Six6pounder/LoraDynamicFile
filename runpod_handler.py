@@ -255,57 +255,74 @@ def train_handler(job):
     except FileNotFoundError:
         return {"status": "error", "message": "Base configuration file not found. Upload it first."}
     
-    # Process training
-    results = []
+    # Define the training function to run in background
+    def run_training_in_background():
+        try:
+            # Process training
+            results = []
+            
+            # Generate captions
+            print("Starting caption generation...")
+            generate_captions(directory, trigger_word)
+            results.append("Captions generated")
+            
+            # Generate masks
+            print("Starting mask generation...")
+            generate_masks(directory)
+            results.append("Masks generated")
+            
+            # Train LoRA models
+            trained_models = []
+            training_combinations = list(itertools.product(lora_ranks, epochs))
+            for lora_rank, epoch in training_combinations:
+                print(f"Starting LoRA training for rank {lora_rank} and {epoch} epochs...")
+                # Create a copy of the base configuration
+                config = copy.deepcopy(base_config)
+                config["lora_rank"] = lora_rank
+                config["epochs"] = epoch
+                
+                # Update paths in the configuration
+                if "concepts" in config and len(config["concepts"]) > 0:
+                    config["concepts"][0]["path"] = directory
+                
+                # Set output paths
+                config["save_filename_prefix"] = f"{prefix_save_as}{lora_rank}lr-{epoch}e-"
+                output_model_path = f"/workspace/models/{prefix_save_as}{epoch}e-{lora_rank}lr.safetensors"
+                config["output_model_destination"] = output_model_path
+                
+                # Disable TensorBoard to avoid the missing executable error
+                config["use_tensorboard"] = False
+                
+                # Save the temporary configuration
+                temp_config_path = f"/workspace/temp/config_{prefix_save_as.rstrip('-')}_{lora_rank}_{epoch}.json"
+                with open(temp_config_path, "w") as temp_file:
+                    json.dump(config, temp_file, indent=4)
+                
+                # Train the model
+                generate_loras(temp_config_path)
+                
+                # Clean up
+                os.remove(temp_config_path)
+                
+                results.append(f"LoRA trained: {output_model_path}")
+                trained_models.append(output_model_path)
+                
+            print("All training completed successfully!")
+            print(f"Results: {results}")
+            print(f"Trained models: {trained_models}")
+            
+        except Exception as e:
+            print(f"Error during training: {e}")
     
-    # Generate captions
-    generate_captions(directory, trigger_word)
-    results.append("Captions generated")
+    # Start the training in a background thread
+    training_thread = threading.Thread(target=run_training_in_background)
+    training_thread.daemon = True
+    training_thread.start()
     
-    # Generate masks
-    generate_masks(directory)
-    results.append("Masks generated")
-    
-    # Train LoRA models
-    trained_models = []
-    training_combinations = list(itertools.product(lora_ranks, epochs))
-    for lora_rank, epoch in training_combinations:
-        # Create a copy of the base configuration
-        config = copy.deepcopy(base_config)
-        config["lora_rank"] = lora_rank
-        config["epochs"] = epoch
-        
-        # Update paths in the configuration
-        if "concepts" in config and len(config["concepts"]) > 0:
-            config["concepts"][0]["path"] = directory
-        
-        # Set output paths
-        config["save_filename_prefix"] = f"{prefix_save_as}{lora_rank}lr-{epoch}e-"
-        output_model_path = f"/workspace/models/{prefix_save_as}{epoch}e-{lora_rank}lr.safetensors"
-        config["output_model_destination"] = output_model_path
-        
-        # Disable TensorBoard to avoid the missing executable error
-        config["use_tensorboard"] = False
-        
-        # Save the temporary configuration
-        temp_config_path = f"/workspace/temp/config_{prefix_save_as.rstrip('-')}_{lora_rank}_{epoch}.json"
-        with open(temp_config_path, "w") as temp_file:
-            json.dump(config, temp_file, indent=4)
-        
-        # Train the model
-        generate_loras(temp_config_path)
-        
-        # Clean up
-        os.remove(temp_config_path)
-        
-        results.append(f"LoRA trained: {output_model_path}")
-        trained_models.append(output_model_path)
-    
+    # Immediately return a response to avoid TCP timeout
     return {
-        "status": "success", 
-        "results": results,
-        "models": trained_models,
-        "message": "Training completed. Use 'send_model' endpoint to get a one-time code for downloading each model."
+        "status": "started", 
+        "message": "Training has started and is running in the background. Use 'list_models' to check for completed models."
     }
 
 def send_model_handler(job):
