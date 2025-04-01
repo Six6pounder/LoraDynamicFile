@@ -91,27 +91,29 @@ def receive_files_handler(job):
             "message": "No one-time code provided for file transfer"
         }
     
-    # Execute runpodctl to receive the files
-    try:
-        # Change directory to input directory
-        os.chdir("/workspace/input")
-        
-        # Run the receive command
-        cmd = ["runpodctl", "receive", one_time_code]
-        result = subprocess.run(cmd, check=True, text=True, capture_output=True)
-        print(result.stdout)
-        
-        return {
-            "status": "success",
-            "message": "Files received successfully",
-            "details": result.stdout
-        }
-    except subprocess.CalledProcessError as e:
-        return {
-            "status": "error",
-            "message": f"Error receiving files: {e}",
-            "details": e.stderr if hasattr(e, 'stderr') else str(e)
-        }
+    # Start a background thread to receive the files
+    def receive_files_in_background():
+        try:
+            # Change directory to input directory
+            os.chdir("/workspace/input")
+            
+            # Run the receive command
+            cmd = ["runpodctl", "receive", one_time_code]
+            subprocess.run(cmd, check=True, timeout=600)
+            print(f"Files received successfully with code: {one_time_code}")
+        except Exception as e:
+            print(f"Error receiving files: {e}")
+    
+    # Start background thread
+    thread = threading.Thread(target=receive_files_in_background)
+    thread.daemon = True
+    thread.start()
+    
+    # Return immediately to avoid blocking
+    return {
+        "status": "success",
+        "message": f"File transfer initiated with code: {one_time_code}. Transfer will continue in background."
+    }
 
 def train_handler(job):
     """Endpoint to start training"""
