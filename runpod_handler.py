@@ -355,33 +355,38 @@ def start_tcp_server():
         server.listen(MAX_CLIENTS)
         print(f"TCP Server listening on {TCP_HOST}:{TCP_PORT}")
         
-        def signal_handler(sig, frame):
-            print("Shutting down server...")
-            server.close()
-            sys.exit(0)
-            
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
         while True:
-            client, addr = server.accept()
-            print(f"Accepted connection from {addr[0]}:{addr[1]}")
-            
-            # Handle client in a new thread
-            client_thread = threading.Thread(target=handle_client, args=(client,))
-            client_thread.daemon = True
-            client_thread.start()
+            try:
+                client, addr = server.accept()
+                print(f"Accepted connection from {addr[0]}:{addr[1]}")
+                
+                # Handle client in a new thread
+                client_thread = threading.Thread(target=handle_client, args=(client,))
+                client_thread.daemon = True
+                client_thread.start()
+            except Exception as e:
+                print(f"Error accepting connection: {e}")
+                continue
             
     except Exception as e:
         print(f"Server error: {e}")
     finally:
         server.close()
 
+def signal_handler(sig, frame):
+    """Handle shutdown signals"""
+    print("Shutting down server...")
+    sys.exit(0)
+
 if __name__ == "__main__":
+    # Set up signal handlers in the main thread
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     # Start TCP server in a separate thread
     tcp_thread = threading.Thread(target=start_tcp_server)
     tcp_thread.daemon = True
     tcp_thread.start()
     
-    # Also start the RunPod serverless handler for backward compatibility
+    # Start the RunPod serverless handler in the main thread
     runpod.serverless.start({"handler": http_handler}) 
