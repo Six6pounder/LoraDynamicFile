@@ -231,6 +231,9 @@ def train_handler(job):
         output_model_path = f"/workspace/models/{prefix_save_as}{epoch}e-{lora_rank}lr.safetensors"
         config["output_model_destination"] = output_model_path
         
+        # Disable TensorBoard to avoid the missing executable error
+        config["use_tensorboard"] = False
+        
         # Save the temporary configuration
         temp_config_path = f"/workspace/temp/config_{prefix_save_as.rstrip('-')}_{lora_rank}_{epoch}.json"
         with open(temp_config_path, "w") as temp_file:
