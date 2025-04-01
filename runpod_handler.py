@@ -345,7 +345,7 @@ def handle_client(client_socket):
         # Close the connection
         client_socket.close()
 
-def start_tcp_server():
+def start_tcp_server(stop_event):
     """Start a TCP server to listen for client connections"""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -355,7 +355,10 @@ def start_tcp_server():
         server.listen(MAX_CLIENTS)
         print(f"TCP Server listening on {TCP_HOST}:{TCP_PORT}")
         
-        while True:
+        # Set a timeout so we can check the stop event
+        server.settimeout(1.0)
+        
+        while not stop_event.is_set():
             try:
                 client, addr = server.accept()
                 print(f"Accepted connection from {addr[0]}:{addr[1]}")
@@ -364,8 +367,11 @@ def start_tcp_server():
                 client_thread = threading.Thread(target=handle_client, args=(client,))
                 client_thread.daemon = True
                 client_thread.start()
+            except socket.timeout:
+                continue
             except Exception as e:
-                print(f"Error accepting connection: {e}")
+                if not stop_event.is_set():
+                    print(f"Error accepting connection: {e}")
                 continue
             
     except Exception as e:
@@ -373,20 +379,26 @@ def start_tcp_server():
     finally:
         server.close()
 
-def signal_handler(sig, frame):
-    """Handle shutdown signals"""
-    print("Shutting down server...")
-    sys.exit(0)
-
 if __name__ == "__main__":
-    # Set up signal handlers in the main thread
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # Create an event for signaling threads to stop
+    stop_event = threading.Event()
     
     # Start TCP server in a separate thread
-    tcp_thread = threading.Thread(target=start_tcp_server)
+    tcp_thread = threading.Thread(target=start_tcp_server, args=(stop_event,))
     tcp_thread.daemon = True
     tcp_thread.start()
     
-    # Start the RunPod serverless handler in the main thread
-    runpod.serverless.start({"handler": http_handler}) 
+    # Run the handler
+    try:
+        print("Starting server in production mode...")
+        # Keep the server running
+        while not stop_event.is_set():
+            try:
+                time.sleep(1)
+            except KeyboardInterrupt:
+                print("\nShutting down server...")
+                break
+    except Exception as e:
+        print(f"Handler error: {e}")
+    finally:
+        stop_event.set() 
