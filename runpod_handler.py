@@ -109,9 +109,36 @@ def receive_files_handler(job):
     """Endpoint to handle file receiving via runpodctl"""
     job_input = job["input"]
     
+    # Clear the input directory before receiving new files
+    input_dir = "/workspace/input"
+    try:
+        # Remove all files and subdirectories in the input directory
+        if os.path.exists(input_dir):
+            print(f"Cleaning up existing files in {input_dir}")
+            for item in os.listdir(input_dir):
+                item_path = os.path.join(input_dir, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    print(f"Removed directory: {item_path}")
+                else:
+                    os.remove(item_path)
+                    print(f"Removed file: {item_path}")
+    except Exception as e:
+        print(f"Error cleaning input directory: {e}")
+        # Continue with the process even if cleanup fails
+    
     # If a base configuration is provided, save it
     if "base_config" in job_input:
         save_base_config(job_input["base_config"])
+    else:
+        # Clean up existing configuration file before using default
+        if os.path.exists(BASE_CONFIG_PATH):
+            try:
+                os.remove(BASE_CONFIG_PATH)
+                print(f"Removed existing configuration file: {BASE_CONFIG_PATH}")
+            except Exception as e:
+                print(f"Error removing configuration file: {e}")
+        save_base_config(None)  # This will create a default config
         
     # Get the one-time code for receiving files
     one_time_code = job_input.get("one_time_code")
@@ -166,7 +193,7 @@ def receive_files_handler(job):
     # Return immediately to avoid blocking
     return {
         "status": "success",
-        "message": f"File transfer initiated with code: {one_time_code}. Transfer will continue in background."
+        "message": f"File transfer initiated with code: {one_time_code}. Transfer will continue in background. Old files will be deleted."
     }
 
 def train_handler(job):
@@ -178,6 +205,32 @@ def train_handler(job):
     directory = model_config.get("directory", "/workspace/input")
     trigger_word = model_config.get("trigger_word", "concept")
     prefix_save_as = model_config.get("prefix_save_as", "model-")
+    
+    # Clean up output directories before starting
+    try:
+        # Clean up the temporary directory
+        temp_dir = "/workspace/temp"
+        if os.path.exists(temp_dir):
+            for item in os.listdir(temp_dir):
+                item_path = os.path.join(temp_dir, item)
+                if item.endswith(".json"):  # Only remove JSON config files
+                    os.remove(item_path)
+                    print(f"Removed old config file: {item_path}")
+                    
+        # Clean up the logs directory
+        logs_dir = "/workspace/logs"
+        if os.path.exists(logs_dir):
+            for item in os.listdir(logs_dir):
+                item_path = os.path.join(logs_dir, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    print(f"Removed log directory: {item_path}")
+                else:
+                    os.remove(item_path)
+                    print(f"Removed log file: {item_path}")
+    except Exception as e:
+        print(f"Warning: Error cleaning up directories: {e}")
+        # Continue even if cleanup fails
     
     # Get training parameters
     lora_ranks = job_input.get("lora_ranks", DEFAULT_LORA_RANKS)
