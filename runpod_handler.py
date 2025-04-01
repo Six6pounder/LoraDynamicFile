@@ -404,4 +404,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Handler error: {e}")
     finally:
-        stop_event.set() 
+        stop_event.set()
