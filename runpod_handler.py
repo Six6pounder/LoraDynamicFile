@@ -7,6 +7,10 @@ import subprocess
 import shutil
 from tqdm import tqdm
 import time
+import socket
+import threading
+import signal
+import sys
 
 # Base path for OneTrainer in the container
 ONETRAINER_PATH = "/workspace/OneTrainer"
@@ -17,6 +21,11 @@ PYTHON_CMD = "python"
 # Default ranks and epochs - can be overridden in the request
 DEFAULT_LORA_RANKS = [64]
 DEFAULT_EPOCHS = [200]
+
+# TCP server configuration
+TCP_HOST = '0.0.0.0'  # Listen on all interfaces
+TCP_PORT = 8080       # Port for TCP connection
+MAX_CLIENTS = 5       # Maximum number of concurrent clients
 
 # Ensure required directories exist
 os.makedirs("/workspace/input", exist_ok=True)
@@ -274,7 +283,7 @@ handlers = {
 }
 
 # RunPod serverless handler
-def handler(job):
+def http_handler(job):
     job_input = job.get("input", {})
     action = job_input.get("action", "")
     
@@ -286,5 +295,93 @@ def handler(job):
             "message": f"Unknown action: {action}. Available actions: {list(handlers.keys())}"
         }
 
-# Start the RunPod serverless handler
-runpod.serverless.start({"handler": handler}) 
+# TCP server implementation
+def handle_client(client_socket):
+    """Handle client TCP connections"""
+    try:
+        # Receive data from client
+        data = b""
+        while True:
+            chunk = client_socket.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+            
+            # Check if we have received a complete message
+            if b"\n" in data:
+                break
+        
+        # Decode and parse the request
+        if not data:
+            return
+            
+        try:
+            job = json.loads(data.decode('utf-8'))
+            action = job.get("input", {}).get("action", "")
+            
+            # Process the request
+            if action in handlers:
+                result = handlers[action](job)
+            else:
+                result = {
+                    "status": "error",
+                    "message": f"Unknown action: {action}. Available actions: {list(handlers.keys())}"
+                }
+                
+            # Send the response back
+            client_socket.sendall(json.dumps(result).encode('utf-8') + b"\n")
+            
+        except json.JSONDecodeError:
+            # Send error response
+            error = {
+                "status": "error",
+                "message": "Invalid JSON request"
+            }
+            client_socket.sendall(json.dumps(error).encode('utf-8') + b"\n")
+            
+    except Exception as e:
+        print(f"Error handling client: {e}")
+    finally:
+        # Close the connection
+        client_socket.close()
+
+def start_tcp_server():
+    """Start a TCP server to listen for client connections"""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
+    try:
+        server.bind((TCP_HOST, TCP_PORT))
+        server.listen(MAX_CLIENTS)
+        print(f"TCP Server listening on {TCP_HOST}:{TCP_PORT}")
+        
+        def signal_handler(sig, frame):
+            print("Shutting down server...")
+            server.close()
+            sys.exit(0)
+            
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        while True:
+            client, addr = server.accept()
+            print(f"Accepted connection from {addr[0]}:{addr[1]}")
+            
+            # Handle client in a new thread
+            client_thread = threading.Thread(target=handle_client, args=(client,))
+            client_thread.daemon = True
+            client_thread.start()
+            
+    except Exception as e:
+        print(f"Server error: {e}")
+    finally:
+        server.close()
+
+if __name__ == "__main__":
+    # Start TCP server in a separate thread
+    tcp_thread = threading.Thread(target=start_tcp_server)
+    tcp_thread.daemon = True
+    tcp_thread.start()
+    
+    # Also start the RunPod serverless handler for backward compatibility
+    runpod.serverless.start({"handler": http_handler}) 
