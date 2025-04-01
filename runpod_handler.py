@@ -72,6 +72,36 @@ def generate_loras(config_path):
 
 def save_base_config(config_data):
     """Save the provided base configuration or use default if not provided"""
+    if not config_data:
+        # Create a default configuration
+        default_config = {
+            "project_name": "lora_training",
+            "lora_rank": 64,
+            "epochs": 200,
+            "save_every_n_epochs": 50,
+            "network_category": "lora",
+            "network_dim": 64,
+            "lr": 1e-4,
+            "unet_lr": 1e-4,
+            "text_encoder_lr": 1e-5,
+            "resolution": 512,
+            "batch_size": 2,
+            "clip_skip": 2,
+            "logging_dir": "/workspace/logs",
+            "save_precision": "fp16",
+            "save_model_as": "safetensors",
+            "train_data_dir": "/workspace/input",
+            "output_dir": "/workspace/output",
+            "output_model_destination": "/workspace/models/model.safetensors",
+            "concepts": [
+                {
+                    "path": "/workspace/input",
+                    "instance_prompt": "a photo of a concept"
+                }
+            ]
+        }
+        config_data = default_config
+        
     with open(BASE_CONFIG_PATH, 'w') as f:
         json.dump(config_data, indent=4, fp=f)
 
@@ -101,8 +131,32 @@ def receive_files_handler(job):
             cmd = ["runpodctl", "receive", one_time_code]
             subprocess.run(cmd, check=True, timeout=600)
             print(f"Files received successfully with code: {one_time_code}")
+            
+            # Find and extract the tar.gz file
+            for file in os.listdir("."):
+                if file.endswith(".tar.gz"):
+                    print(f"Extracting archive: {file}")
+                    subprocess.run(["tar", "-xzf", file], check=True)
+                    
+                    # Remove the tar file after extraction
+                    os.remove(file)
+                    print(f"Extracted contents and removed archive: {file}")
+                    
+                    # If a directory named 'temp_bundle' exists, move its contents up
+                    if os.path.exists("temp_bundle"):
+                        for item in os.listdir("temp_bundle"):
+                            src_path = os.path.join("temp_bundle", item)
+                            if os.path.exists(item):
+                                if os.path.isdir(item):
+                                    shutil.rmtree(item)
+                                else:
+                                    os.remove(item)
+                            shutil.move(src_path, ".")
+                        os.rmdir("temp_bundle")
+                        print("Moved contents from temp_bundle to input directory")
+                    break
         except Exception as e:
-            print(f"Error receiving files: {e}")
+            print(f"Error receiving or extracting files: {e}")
     
     # Start background thread
     thread = threading.Thread(target=receive_files_in_background)
@@ -128,6 +182,18 @@ def train_handler(job):
     # Get training parameters
     lora_ranks = job_input.get("lora_ranks", DEFAULT_LORA_RANKS)
     epochs = job_input.get("epochs", DEFAULT_EPOCHS)
+    
+    # Verify the directory exists and contains files
+    if not os.path.exists(directory):
+        return {"status": "error", "message": f"Training directory not found: {directory}"}
+    
+    files = os.listdir(directory)
+    image_files = [f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+    
+    if not image_files:
+        return {"status": "error", "message": f"No image files found in {directory}. Make sure the extraction was successful."}
+    
+    print(f"Found {len(image_files)} image files in {directory}")
     
     # Load the base configuration
     try:
@@ -276,13 +342,51 @@ def shutdown_handler(job):
         "message": "To shutdown the pod, use the RunPod API or web interface."
     }
 
+def check_upload_handler(job):
+    """Check the status of uploaded files"""
+    input_dir = "/workspace/input"
+    
+    if not os.path.exists(input_dir):
+        return {
+            "status": "error",
+            "message": "Input directory does not exist"
+        }
+    
+    try:
+        # Get all files in the input directory
+        all_files = []
+        for root, dirs, files in os.walk(input_dir):
+            relative_path = os.path.relpath(root, input_dir)
+            if relative_path == ".":
+                relative_path = ""
+            
+            for file in files:
+                file_path = os.path.join(relative_path, file)
+                all_files.append(file_path)
+        
+        # Count image files
+        image_files = [f for f in all_files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+        
+        return {
+            "status": "success",
+            "message": f"Found {len(all_files)} files in total, including {len(image_files)} image files",
+            "files": all_files,
+            "image_count": len(image_files)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error checking files: {str(e)}"
+        }
+
 # Map endpoints to handlers
 handlers = {
     "receive_files": receive_files_handler,
     "train": train_handler,
     "send_model": send_model_handler,
     "list_models": list_models_handler,
-    "shutdown": shutdown_handler
+    "shutdown": shutdown_handler,
+    "check_upload": check_upload_handler
 }
 
 # RunPod serverless handler
@@ -404,4 +508,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Handler error: {e}")
     finally:
-        stop_event.set()
+        stop_event.set() 
