@@ -486,18 +486,64 @@ def list_models_handler(job):
     
     # List all .safetensors files in the models directory
     models = []
+    in_progress_models = []
+    
     for file in os.listdir(models_dir):
         if file.endswith(".safetensors"):
             model_path = os.path.join(models_dir, file)
-            models.append({
-                "filename": file,
-                "path": model_path,
-                "size_mb": round(os.path.getsize(model_path) / (1024 * 1024), 2)
-            })
+            
+            # Check if the file is still being written to
+            # by measuring the file size, waiting a moment, and checking again
+            try:
+                initial_size = os.path.getsize(model_path)
+                time.sleep(1)  # Wait a short time
+                current_size = os.path.getsize(model_path)
+                
+                # If size changed, file is still being written
+                if current_size != initial_size:
+                    in_progress_models.append({
+                        "filename": file,
+                        "path": model_path,
+                        "size_mb": round(current_size / (1024 * 1024), 2),
+                        "status": "in_progress"
+                    })
+                    continue
+                
+                # Extra check - wait a bit longer for larger files
+                if current_size > 100 * 1024 * 1024:  # If larger than 100MB
+                    time.sleep(2)  # Wait a bit more
+                    final_check_size = os.path.getsize(model_path)
+                    if final_check_size != current_size:
+                        in_progress_models.append({
+                            "filename": file,
+                            "path": model_path,
+                            "size_mb": round(final_check_size / (1024 * 1024), 2),
+                            "status": "in_progress"
+                        })
+                        continue
+                
+                # If we got here, file size is stable - model is ready
+                models.append({
+                    "filename": file,
+                    "path": model_path,
+                    "size_mb": round(current_size / (1024 * 1024), 2),
+                    "status": "complete"
+                })
+            except Exception as e:
+                # If there's an error accessing the file, it might be in use
+                print(f"Error checking model file {file}: {e}")
+                in_progress_models.append({
+                    "filename": file,
+                    "path": model_path,
+                    "size_mb": 0,
+                    "status": "error",
+                    "error": str(e)
+                })
     
     return {
         "status": "success",
         "models": models,
+        "in_progress_models": in_progress_models,
         "message": "Use 'send_model' endpoint with a 'model_path' parameter to get a one-time code for downloading"
     }
 
