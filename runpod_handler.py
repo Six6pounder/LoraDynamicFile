@@ -126,7 +126,9 @@ def receive_files_handler(job):
                 for item in os.listdir(folder):
                     item_path = os.path.join(folder, item)
                     if os.path.isdir(item_path):
-                        if folder == "/workspace/models" and item == "OneTrainer":
+                        if folder == "/workspace/models":
+                            # Don't delete the base folder that is inside it
+                            print(f"Skipping base folder: {item_path}")
                             continue
                         shutil.rmtree(item_path)
                         print(f"Removed directory: {item_path}")
@@ -137,7 +139,7 @@ def receive_files_handler(job):
     except Exception as e:
         print(f"Warning: Error cleaning up directories: {e}")
         # Continue even if cleanup fails
-        
+
     # If a base configuration is provided, save it
     if "base_config" in job_input:
         save_base_config(job_input["base_config"])
