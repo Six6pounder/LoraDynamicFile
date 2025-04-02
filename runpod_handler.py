@@ -228,6 +228,31 @@ def train_handler(job):
                 else:
                     os.remove(item_path)
                     print(f"Removed log file: {item_path}")
+
+        # Clean up the OneTrainer workspace directory
+        workspace_dir = "/workspace/OneTrainer/workspace"
+        if os.path.exists(workspace_dir):
+            for item in os.listdir(workspace_dir):
+                item_path = os.path.join(workspace_dir, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    print(f"Removed workspace directory: {item_path}")
+                else:
+                    os.remove(item_path)
+                    print(f"Removed workspace file: {item_path}")
+
+        # Clean up the OneTrainer workspace-cache directory
+        workspace_cache_dir = "/workspace/OneTrainer/workspace-cache"
+        if os.path.exists(workspace_cache_dir):
+            for item in os.listdir(workspace_cache_dir):
+                item_path = os.path.join(workspace_cache_dir, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    print(f"Removed workspace-cache directory: {item_path}")
+                else:
+                    os.remove(item_path)
+                    print(f"Removed workspace-cache file: {item_path}")
+        
     except Exception as e:
         print(f"Warning: Error cleaning up directories: {e}")
         # Continue even if cleanup fails
@@ -287,7 +312,7 @@ def train_handler(job):
                 
                 # Set output paths
                 config["save_filename_prefix"] = f"{prefix_save_as}{lora_rank}lr-{epoch}e-"
-                output_model_path = f"/workspace/models/{prefix_save_as}{epoch}e-{lora_rank}lr.safetensors"
+                output_model_path = f"/workspace/models/{prefix_save_as.rstrip('-')}.safetensors"
                 config["output_model_destination"] = output_model_path
                 
                 # Disable TensorBoard to avoid the missing executable error
