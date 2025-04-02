@@ -349,36 +349,70 @@ def send_model_handler(job):
         # Change to the directory containing the model
         os.chdir(os.path.dirname(model_path))
         
-        # Run runpodctl send
+        # Get the model filename
         model_filename = os.path.basename(model_path)
+        
+        # First run runpodctl send to get the one-time code
         cmd = ["runpodctl", "send", model_filename]
-        result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
         
-        # Extract the one-time code from the output
-        # Output example: "Code is: 8338-galileo-collect-fidel"
-        output_lines = result.stdout.strip().split('\n')
-        code_line = [line for line in output_lines if "Code is:" in line]
+        # Read output lines until we find the one-time code
+        one_time_code = None
+        for line in process.stdout:
+            line = line.strip()
+            print(f"Send output: {line}")
+            
+            if "Code is:" in line:
+                one_time_code = line.split("Code is:")[1].strip()
+                print(f"Found one-time code: {one_time_code}")
+                break
         
-        if not code_line:
+        if not one_time_code:
             return {
                 "status": "error",
                 "message": "Failed to get one-time code",
-                "details": result.stdout
+                "details": "Could not parse one-time code from output"
             }
         
-        one_time_code = code_line[0].split("Code is:")[1].strip()
+        # Start a background thread to handle the rest of the file sending
+        def send_file_in_background():
+            try:
+                # Let the process continue running to completion
+                stdout, stderr = process.communicate()
+                exit_code = process.wait()
+                
+                if exit_code != 0:
+                    print(f"Error in runpodctl send background process: {stderr}")
+                else:
+                    print(f"Model {model_filename} was successfully prepared for sending with code: {one_time_code}")
+                    print(f"Full output: {stdout}")
+            except Exception as e:
+                print(f"Error in background file sending: {e}")
         
+        # Start the background thread
+        thread = threading.Thread(target=send_file_in_background)
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately with the one-time code
         return {
             "status": "success",
-            "message": f"Ready to send {model_filename}",
+            "message": f"Model {model_filename} is ready to be downloaded",
             "one_time_code": one_time_code,
             "instructions": f"On your local machine run: runpodctl receive {one_time_code}"
         }
-    except subprocess.CalledProcessError as e:
+        
+    except Exception as e:
         return {
             "status": "error",
-            "message": f"Error sending model: {e}",
-            "details": e.stderr if hasattr(e, 'stderr') else str(e)
+            "message": f"Error preparing model for sending: {e}",
+            "details": str(e)
         }
 
 def list_models_handler(job):
