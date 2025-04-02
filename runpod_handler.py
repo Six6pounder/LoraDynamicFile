@@ -351,9 +351,12 @@ def send_model_handler(job):
         
         # Get the model filename
         model_filename = os.path.basename(model_path)
+        print(f"Preparing to send model: {model_filename}")
         
         # First run runpodctl send to get the one-time code
         cmd = ["runpodctl", "send", model_filename]
+        print(f"Running command: {' '.join(cmd)}")
+        
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -364,21 +367,69 @@ def send_model_handler(job):
         
         # Read output lines until we find the one-time code
         one_time_code = None
-        for line in process.stdout:
+        output_lines = []
+        
+        # Set a maximum time to wait for the code
+        start_time = time.time()
+        max_wait_time = 30  # seconds
+        
+        while time.time() - start_time < max_wait_time:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+                
             line = line.strip()
+            output_lines.append(line)
             print(f"Send output: {line}")
             
+            # Check various formats of how the code might be presented
             if "Code is:" in line:
                 one_time_code = line.split("Code is:")[1].strip()
-                print(f"Found one-time code: {one_time_code}")
+                print(f"Found one-time code (format 1): {one_time_code}")
+                break
+            elif "Code:" in line:
+                one_time_code = line.split("Code:")[1].strip()
+                print(f"Found one-time code (format 2): {one_time_code}")
+                break
+            elif "-" in line and len(line.split()) <= 2:
+                # This looks like just the code by itself (e.g., 4240-chemist-saddle-rabbit-6)
+                one_time_code = line
+                print(f"Found one-time code (format 3): {one_time_code}")
                 break
         
+        # If we didn't find the code in the standard output, check if it was the last line printed
+        if not one_time_code and output_lines:
+            last_line = output_lines[-1]
+            if "-" in last_line and len(last_line.split("-")) >= 2:
+                one_time_code = last_line
+                print(f"Using last line as one-time code: {one_time_code}")
+        
+        # Manually set the one-time code if we saw it in the logs but couldn't parse it
+        if not one_time_code and job_input.get("manual_code"):
+            one_time_code = job_input.get("manual_code")
+            print(f"Using manually provided one-time code: {one_time_code}")
+            
+        # If we still don't have a code, check if the process wrote anything to stderr
         if not one_time_code:
-            return {
-                "status": "error",
-                "message": "Failed to get one-time code",
-                "details": "Could not parse one-time code from output"
-            }
+            stderr_output = ""
+            for line in process.stderr:
+                stderr_output += line
+                print(f"Error output: {line.strip()}")
+            
+            if stderr_output:
+                return {
+                    "status": "error",
+                    "message": "Failed to get one-time code",
+                    "details": f"Error output: {stderr_output}",
+                    "stdout": "\n".join(output_lines)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "Failed to get one-time code",
+                    "details": "Could not parse one-time code from output",
+                    "stdout": "\n".join(output_lines)
+                }
         
         # Start a background thread to handle the rest of the file sending
         def send_file_in_background():
@@ -391,7 +442,8 @@ def send_model_handler(job):
                     print(f"Error in runpodctl send background process: {stderr}")
                 else:
                     print(f"Model {model_filename} was successfully prepared for sending with code: {one_time_code}")
-                    print(f"Full output: {stdout}")
+                    if stdout:
+                        print(f"Full output: {stdout}")
             except Exception as e:
                 print(f"Error in background file sending: {e}")
         
@@ -409,6 +461,9 @@ def send_model_handler(job):
         }
         
     except Exception as e:
+        print(f"Exception in send_model_handler: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {
             "status": "error",
             "message": f"Error preparing model for sending: {e}",
