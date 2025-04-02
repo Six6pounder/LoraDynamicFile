@@ -115,21 +115,36 @@ def receive_files_handler(job):
             "/workspace/input",
             "/workspace/temp",
             "/workspace/logs",
-            "/workspace/models",
             "/workspace/OneTrainer/workspace",
             "/workspace/OneTrainer/workspace-cache"
         ]
 
-        # Clean up the directories
+        # Special handling for models directory to preserve base directory and its contents
+        models_dir = "/workspace/models"
+        if os.path.exists(models_dir):
+            print(f"Cleaning models directory while preserving base folder...")
+            for item in os.listdir(models_dir):
+                item_path = os.path.join(models_dir, item)
+                
+                # Skip the base directory and its contents
+                if item == "base" and os.path.isdir(item_path):
+                    print(f"Preserving base directory: {item_path}")
+                    continue
+                
+                # Remove other files and directories
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    print(f"Removed directory: {item_path}")
+                else:
+                    os.remove(item_path)
+                    print(f"Removed file: {item_path}")
+
+        # Clean up the other directories
         for folder in folders_to_clean:
             if os.path.exists(folder):
                 for item in os.listdir(folder):
                     item_path = os.path.join(folder, item)
                     if os.path.isdir(item_path):
-                        if folder == "/workspace/models":
-                            # Don't delete the base folder that is inside it
-                            print(f"Skipping base folder: {item_path}")
-                            continue
                         shutil.rmtree(item_path)
                         print(f"Removed directory: {item_path}")
                     else:
