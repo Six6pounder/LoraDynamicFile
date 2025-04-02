@@ -138,22 +138,6 @@ def receive_files_handler(job):
         print(f"Warning: Error cleaning up directories: {e}")
         # Continue even if cleanup fails
         
-    try:
-        # Remove all files and subdirectories in the input directory
-        if os.path.exists(input_dir):
-            print(f"Cleaning up existing files in {input_dir}")
-            for item in os.listdir(input_dir):
-                item_path = os.path.join(input_dir, item)
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                    print(f"Removed directory: {item_path}")
-                else:
-                    os.remove(item_path)
-                    print(f"Removed file: {item_path}")
-    except Exception as e:
-        print(f"Error cleaning input directory: {e}")
-        # Continue with the process even if cleanup fails
-    
     # If a base configuration is provided, save it
     if "base_config" in job_input:
         save_base_config(job_input["base_config"])
