@@ -108,9 +108,36 @@ def save_base_config(config_data):
 def receive_files_handler(job):
     """Endpoint to handle file receiving via runpodctl"""
     job_input = job["input"]
-    
-    # Clear the input directory before receiving new files
-    input_dir = "/workspace/input"
+
+    # Clean up output directories before starting
+    try:
+        folders_to_clean = [
+            "/workspace/input",
+            "/workspace/temp",
+            "/workspace/logs",
+            "/workspace/models",
+            "/workspace/OneTrainer/workspace",
+            "/workspace/OneTrainer/workspace-cache"
+        ]
+
+        # Clean up the directories
+        for folder in folders_to_clean:
+            if os.path.exists(folder):
+                for item in os.listdir(folder):
+                    item_path = os.path.join(folder, item)
+                    if os.path.isdir(item_path):
+                        if folder == "/workspace/models" and item == "OneTrainer":
+                            continue
+                        shutil.rmtree(item_path)
+                        print(f"Removed directory: {item_path}")
+                    else:
+                        os.remove(item_path)
+                        print(f"Removed file: {item_path}")
+        
+    except Exception as e:
+        print(f"Warning: Error cleaning up directories: {e}")
+        # Continue even if cleanup fails
+        
     try:
         # Remove all files and subdirectories in the input directory
         if os.path.exists(input_dir):
@@ -205,35 +232,6 @@ def train_handler(job):
     directory = model_config.get("directory", "/workspace/input")
     trigger_word = model_config.get("trigger_word", "concept")
     prefix_save_as = model_config.get("prefix_save_as", "model-")
-    
-    # Clean up output directories before starting
-    try:
-        folders_to_clean = [
-            "/workspace/input",
-            "/workspace/temp",
-            "/workspace/logs",
-            "/workspace/models",
-            "/workspace/OneTrainer/workspace",
-            "/workspace/OneTrainer/workspace-cache"
-        ]
-
-        # Clean up the directories
-        for folder in folders_to_clean:
-            if os.path.exists(folder):
-                for item in os.listdir(folder):
-                    item_path = os.path.join(folder, item)
-                    if os.path.isdir(item_path):
-                        if folder == "/workspace/models" and item == "OneTrainer":
-                            continue
-                        shutil.rmtree(item_path)
-                        print(f"Removed directory: {item_path}")
-                    else:
-                        os.remove(item_path)
-                        print(f"Removed file: {item_path}")
-        
-    except Exception as e:
-        print(f"Warning: Error cleaning up directories: {e}")
-        # Continue even if cleanup fails
     
     # Get training parameters
     lora_ranks = job_input.get("lora_ranks", DEFAULT_LORA_RANKS)
