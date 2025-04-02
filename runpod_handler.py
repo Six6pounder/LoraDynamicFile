@@ -132,12 +132,14 @@ def receive_files_handler(job):
                     continue
                 
                 # Remove other files and directories
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                    print(f"Removed directory: {item_path}")
-                else:
-                    os.remove(item_path)
-                    print(f"Removed file: {item_path}")
+                if os.path.isfile(item_path):
+                    # if item is inside base folder, don't delete it
+                    if "base" in item_path:
+                        print(f"Skipping base folder: {item_path}")
+                        continue
+                    else:
+                        os.remove(item_path)
+                        print(f"Removed file: {item_path}")
 
         # Clean up the other directories
         for folder in folders_to_clean:
