@@ -208,50 +208,23 @@ def train_handler(job):
     
     # Clean up output directories before starting
     try:
-        # Clean up the temporary directory
-        temp_dir = "/workspace/temp"
-        if os.path.exists(temp_dir):
-            for item in os.listdir(temp_dir):
-                item_path = os.path.join(temp_dir, item)
-                if item.endswith(".json"):  # Only remove JSON config files
-                    os.remove(item_path)
-                    print(f"Removed old config file: {item_path}")
-                    
-        # Clean up the logs directory
-        logs_dir = "/workspace/logs"
-        if os.path.exists(logs_dir):
-            for item in os.listdir(logs_dir):
-                item_path = os.path.join(logs_dir, item)
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                    print(f"Removed log directory: {item_path}")
-                else:
-                    os.remove(item_path)
-                    print(f"Removed log file: {item_path}")
+        folders_to_clean = [
+            "/workspace/temp",
+            "/workspace/logs",
+            "/workspace/OneTrainer/workspace",
+            "/workspace/OneTrainer/workspace-cache"
+        ]
 
-        # Clean up the OneTrainer workspace directory
-        workspace_dir = "/workspace/OneTrainer/workspace"
-        if os.path.exists(workspace_dir):
-            for item in os.listdir(workspace_dir):
-                item_path = os.path.join(workspace_dir, item)
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                    print(f"Removed workspace directory: {item_path}")
-                else:
-                    os.remove(item_path)
-                    print(f"Removed workspace file: {item_path}")
-
-        # Clean up the OneTrainer workspace-cache directory
-        workspace_cache_dir = "/workspace/OneTrainer/workspace-cache"
-        if os.path.exists(workspace_cache_dir):
-            for item in os.listdir(workspace_cache_dir):
-                item_path = os.path.join(workspace_cache_dir, item)
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                    print(f"Removed workspace-cache directory: {item_path}")
-                else:
-                    os.remove(item_path)
-                    print(f"Removed workspace-cache file: {item_path}")
+        for folder in folders_to_clean:
+            if os.path.exists(folder):
+                for item in os.listdir(folder):
+                    item_path = os.path.join(folder, item)
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                        print(f"Removed directory: {item_path}")
+                    else:
+                        os.remove(item_path)
+                        print(f"Removed file: {item_path}")
         
     except Exception as e:
         print(f"Warning: Error cleaning up directories: {e}")
