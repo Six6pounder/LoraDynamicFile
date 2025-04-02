@@ -27,6 +27,9 @@ TCP_HOST = '0.0.0.0'  # Listen on all interfaces
 TCP_PORT = 8080       # Port for TCP connection
 MAX_CLIENTS = 5       # Maximum number of concurrent clients
 
+# Flag to indicate server readiness
+SERVER_READY = False
+
 # Ensure required directories exist
 os.makedirs("/workspace/input", exist_ok=True)
 os.makedirs("/workspace/output", exist_ok=True)
@@ -591,6 +594,15 @@ def check_upload_handler(job):
             "message": f"Error checking files: {str(e)}"
         }
 
+def check_status_handler(job):
+    """Endpoint to check if server is ready to receive commands"""
+    return {
+        "status": "success",
+        "ready": SERVER_READY,
+        "message": "Server is ready to receive commands" if SERVER_READY else "Server is initializing",
+        "available_actions": list(handlers.keys())
+    }
+
 # Map endpoints to handlers
 handlers = {
     "receive_files": receive_files_handler,
@@ -598,7 +610,8 @@ handlers = {
     "send_model": send_model_handler,
     "list_models": list_models_handler,
     "shutdown": shutdown_handler,
-    "check_upload": check_upload_handler
+    "check_upload": check_upload_handler,
+    "status": check_status_handler
 }
 
 # RunPod serverless handler
@@ -666,6 +679,7 @@ def handle_client(client_socket):
 
 def start_tcp_server(stop_event):
     """Start a TCP server to listen for client connections"""
+    global SERVER_READY
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
@@ -673,6 +687,10 @@ def start_tcp_server(stop_event):
         server.bind((TCP_HOST, TCP_PORT))
         server.listen(MAX_CLIENTS)
         print(f"TCP Server listening on {TCP_HOST}:{TCP_PORT}")
+        
+        # Server is now ready to accept connections
+        SERVER_READY = True
+        print("Server is ready to receive commands")
         
         # Set a timeout so we can check the stop event
         server.settimeout(1.0)
@@ -696,6 +714,7 @@ def start_tcp_server(stop_event):
     except Exception as e:
         print(f"Server error: {e}")
     finally:
+        SERVER_READY = False
         server.close()
 
 if __name__ == "__main__":
@@ -720,4 +739,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Handler error: {e}")
     finally:
+        SERVER_READY = False
         stop_event.set() 
