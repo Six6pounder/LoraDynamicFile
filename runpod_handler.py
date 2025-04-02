@@ -209,17 +209,22 @@ def train_handler(job):
     # Clean up output directories before starting
     try:
         folders_to_clean = [
+            "/workspace/input",
             "/workspace/temp",
             "/workspace/logs",
+            "/workspace/models",
             "/workspace/OneTrainer/workspace",
             "/workspace/OneTrainer/workspace-cache"
         ]
 
+        # Clean up the directories
         for folder in folders_to_clean:
             if os.path.exists(folder):
                 for item in os.listdir(folder):
                     item_path = os.path.join(folder, item)
                     if os.path.isdir(item_path):
+                        if folder == "/workspace/models" and item == "OneTrainer":
+                            continue
                         shutil.rmtree(item_path)
                         print(f"Removed directory: {item_path}")
                     else:
