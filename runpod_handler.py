@@ -243,6 +243,33 @@ def train_handler(job):
     lora_ranks = job_input.get("lora_ranks", DEFAULT_LORA_RANKS)
     epochs = job_input.get("epochs", DEFAULT_EPOCHS)
     
+    # Check if an upload is in progress by looking for .tar.gz files or runpodctl receive processes
+    upload_in_progress = False
+    
+    # Check for tar.gz files in the input directory which would indicate an extraction in progress
+    if os.path.exists(directory):
+        for file in os.listdir(directory):
+            if file.endswith(".tar.gz"):
+                upload_in_progress = True
+                print(f"Found tar.gz file in progress: {file}")
+                break
+    
+    # Check for runpodctl receive processes
+    try:
+        result = subprocess.run(["ps", "aux"], capture_output=True, text=True)
+        if "runpodctl receive" in result.stdout:
+            upload_in_progress = True
+            print("Found runpodctl receive process running")
+    except Exception as e:
+        print(f"Error checking for runpodctl processes: {e}")
+    
+    if upload_in_progress:
+        print("Upload in progress, waiting before starting training...")
+        return {
+            "status": "waiting",
+            "message": "Un caricamento file è attualmente in corso. Riprova tra qualche minuto quando il caricamento sarà completato."
+        }
+    
     # Verify the directory exists and contains files
     if not os.path.exists(directory):
         return {"status": "error", "message": f"Training directory not found: {directory}"}
@@ -568,6 +595,24 @@ def check_upload_handler(job):
         }
     
     try:
+        # Check if there are any runpodctl receive processes running
+        upload_in_progress = False
+        try:
+            result = subprocess.run(["ps", "aux"], capture_output=True, text=True)
+            if "runpodctl receive" in result.stdout:
+                upload_in_progress = True
+                print("Found runpodctl receive process running")
+        except Exception as e:
+            print(f"Error checking for runpodctl processes: {e}")
+        
+        # Check for tar.gz files in the input directory which would indicate an extraction in progress
+        tar_files = []
+        if os.path.exists(input_dir):
+            tar_files = [f for f in os.listdir(input_dir) if f.endswith('.tar.gz')]
+            if tar_files:
+                upload_in_progress = True
+                print(f"Found tar files waiting for extraction: {tar_files}")
+        
         # Get all files in the input directory
         all_files = []
         for root, dirs, files in os.walk(input_dir):
@@ -576,17 +621,26 @@ def check_upload_handler(job):
                 relative_path = ""
             
             for file in files:
+                # Skip .tar.gz files in the count of "real" files
+                if file.endswith('.tar.gz'):
+                    continue
                 file_path = os.path.join(relative_path, file)
                 all_files.append(file_path)
         
         # Count image files
         image_files = [f for f in all_files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
         
+        status_message = f"Found {len(all_files)} files in total, including {len(image_files)} image files"
+        if upload_in_progress:
+            status_message = "Upload in progress. " + status_message
+        
         return {
             "status": "success",
-            "message": f"Found {len(all_files)} files in total, including {len(image_files)} image files",
+            "message": status_message,
             "files": all_files,
-            "image_count": len(image_files)
+            "image_count": len(image_files),
+            "upload_in_progress": upload_in_progress,
+            "tar_files": tar_files
         }
     except Exception as e:
         return {
