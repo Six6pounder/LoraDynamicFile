@@ -181,6 +181,15 @@ def receive_files_handler(job):
             "message": "No one-time code provided for file transfer"
         }
     
+    # Get training parameters for later use after file upload
+    model_config = job_input.get("model", {})
+    directory = model_config.get("directory", "/workspace/input")
+    trigger_word = model_config.get("trigger_word", "concept")
+    prefix_save_as = model_config.get("prefix_save_as", "model-")
+    lora_ranks = job_input.get("lora_ranks", DEFAULT_LORA_RANKS)
+    epochs = job_input.get("epochs", DEFAULT_EPOCHS)
+    auto_train = job_input.get("auto_train", True)
+    
     # Start a background thread to receive the files
     def receive_files_in_background():
         try:
@@ -193,6 +202,7 @@ def receive_files_handler(job):
             print(f"Files received successfully with code: {one_time_code}")
             
             # Find and extract the tar.gz file
+            extracted = False
             for file in os.listdir("."):
                 if file.endswith(".tar.gz"):
                     print(f"Extracting archive: {file}")
@@ -201,6 +211,7 @@ def receive_files_handler(job):
                     # Remove the tar file after extraction
                     os.remove(file)
                     print(f"Extracted contents and removed archive: {file}")
+                    extracted = True
                     
                     # If a directory named 'temp_bundle' exists, move its contents up
                     if os.path.exists("temp_bundle"):
@@ -215,6 +226,91 @@ def receive_files_handler(job):
                         os.rmdir("temp_bundle")
                         print("Moved contents from temp_bundle to input directory")
                     break
+            
+            # If extraction completed successfully and auto_train is enabled, start training
+            if extracted and auto_train:
+                print("File upload and extraction completed. Starting training automatically...")
+                
+                # Verify the directory exists and contains image files
+                if not os.path.exists(directory):
+                    print(f"Training directory not found: {directory}")
+                    return
+                
+                files = os.listdir(directory)
+                image_files = [f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+                
+                if not image_files:
+                    print(f"No image files found in {directory}. Cannot start training.")
+                    return
+                
+                print(f"Found {len(image_files)} image files in {directory}")
+                
+                # Load the base configuration
+                try:
+                    with open(BASE_CONFIG_PATH) as f:
+                        base_config = json.load(f)
+                except FileNotFoundError:
+                    print("Base configuration file not found. Cannot start training.")
+                    return
+                
+                # Process training (using the same code as in train_handler)
+                try:
+                    # Process training
+                    results = []
+                    
+                    # Generate captions
+                    print("Starting caption generation...")
+                    generate_captions(directory, trigger_word)
+                    results.append("Captions generated")
+                    
+                    # Generate masks
+                    print("Starting mask generation...")
+                    generate_masks(directory)
+                    results.append("Masks generated")
+                    
+                    # Train LoRA models
+                    trained_models = []
+                    training_combinations = list(itertools.product(lora_ranks, epochs))
+                    for lora_rank, epoch in training_combinations:
+                        print(f"Starting LoRA training for rank {lora_rank} and {epoch} epochs...")
+                        # Create a copy of the base configuration
+                        config = copy.deepcopy(base_config)
+                        config["lora_rank"] = lora_rank
+                        config["epochs"] = epoch
+                        
+                        # Update paths in the configuration
+                        if "concepts" in config and len(config["concepts"]) > 0:
+                            config["concepts"][0]["path"] = directory
+                        
+                        # Set output paths
+                        config["save_filename_prefix"] = f"{prefix_save_as}{lora_rank}lr-{epoch}e-"
+                        output_model_path = f"/workspace/models/{prefix_save_as.rstrip('-')}.safetensors"
+                        config["output_model_destination"] = output_model_path
+                        
+                        # Disable TensorBoard to avoid the missing executable error
+                        config["use_tensorboard"] = False
+                        
+                        # Save the temporary configuration
+                        temp_config_path = f"/workspace/temp/config_{prefix_save_as.rstrip('-')}_{lora_rank}_{epoch}.json"
+                        with open(temp_config_path, "w") as temp_file:
+                            json.dump(config, temp_file, indent=4)
+                        
+                        # Train the model
+                        generate_loras(temp_config_path)
+                        
+                        # Clean up
+                        os.remove(temp_config_path)
+                        
+                        results.append(f"LoRA trained: {output_model_path}")
+                        trained_models.append(output_model_path)
+                        
+                    print("All training completed successfully!")
+                    print(f"Results: {results}")
+                    print(f"Trained models: {trained_models}")
+                    
+                except Exception as e:
+                    print(f"Error during automatic training: {e}")
+            
         except Exception as e:
             print(f"Error receiving or extracting files: {e}")
     
@@ -226,7 +322,7 @@ def receive_files_handler(job):
     # Return immediately to avoid blocking
     return {
         "status": "success",
-        "message": f"File transfer initiated with code: {one_time_code}. Transfer will continue in background. Old files will be deleted."
+        "message": f"Trasferimento file avviato con codice: {one_time_code}. Il trasferimento continuerà in background e l'addestramento inizierà automaticamente dopo il completamento del caricamento." if job_input.get("auto_train", True) else f"Trasferimento file avviato con codice: {one_time_code}. Il trasferimento continuerà in background. I file precedenti verranno eliminati."
     }
 
 def train_handler(job):
