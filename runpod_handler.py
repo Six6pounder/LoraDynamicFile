@@ -115,6 +115,7 @@ def receive_files_handler(job):
     # Clean up output directories before starting
     try:
         folders_to_clean = [
+            "/workspace/temp_bundle",
             "/workspace/input",
             "/workspace/temp",
             "/workspace/logs",
@@ -194,7 +195,7 @@ def receive_files_handler(job):
     def receive_files_in_background():
         try:
             # Change directory to input directory
-            os.chdir("/workspace/input")
+            os.chdir("/workspace/")
             
             # Run the receive command
             cmd = ["runpodctl", "receive", one_time_code]
@@ -227,7 +228,7 @@ def receive_files_handler(job):
                                     shutil.rmtree(item)
                                 else:
                                     os.remove(item)
-                            shutil.move(src_path, ".")
+                            shutil.move(src_path, "/workspace/input")
                         os.rmdir("temp_bundle")
                         print("Moved contents from temp_bundle to input directory")
                     break
