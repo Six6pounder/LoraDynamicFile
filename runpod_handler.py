@@ -229,8 +229,13 @@ def receive_files_handler(job):
                                 else:
                                     os.remove(item)
                             shutil.move(src_path, "/workspace/input")
-                        os.rmdir("temp_bundle")
-                        print("Moved contents from temp_bundle to input directory")
+                        try:
+                            # Usa rmtree invece di rmdir per rimuovere la directory anche se contiene file nascosti
+                            shutil.rmtree("temp_bundle")
+                            print("Moved contents from temp_bundle to input directory and removed temp_bundle")
+                        except Exception as e:
+                            print(f"Error removing temp_bundle directory: {e}")
+                            # Continua anche se non è possibile rimuovere la directory
                     break
             
             # If extraction completed successfully and auto_train is enabled, start training
