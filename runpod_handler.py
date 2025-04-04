@@ -216,6 +216,11 @@ def receive_files_handler(job):
                     # If a directory named 'temp_bundle' exists, move its contents up
                     if os.path.exists("temp_bundle"):
                         for item in os.listdir("temp_bundle"):
+                            # Salta i file che iniziano con punto (nascosti)
+                            if item.startswith('.'):
+                                print(f"Skipping hidden file/directory: {item}")
+                                continue
+                                
                             src_path = os.path.join("temp_bundle", item)
                             if os.path.exists(item):
                                 if os.path.isdir(item):
