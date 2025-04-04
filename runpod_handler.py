@@ -347,8 +347,13 @@ def train_handler(job):
     prefix_save_as = model_config.get("prefix_save_as", "model-")
     
     # Get training parameters
-    lora_ranks = job_input.get("lora_ranks", DEFAULT_LORA_RANKS)
-    epochs = job_input.get("epochs", DEFAULT_EPOCHS)
+    lora_ranks = DEFAULT_LORA_RANKS
+    if job_input.get("lora_ranks"):
+        lora_ranks = job_input.get("lora_ranks")
+
+    epochs = DEFAULT_EPOCHS
+    if job_input.get("epochs"):
+        epochs = job_input.get("epochs")
     
     # Check if an upload is in progress by looking for .tar.gz files or runpodctl receive processes
     upload_in_progress = False
