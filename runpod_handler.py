@@ -354,7 +354,7 @@ def train_handler(job):
     epochs = DEFAULT_EPOCHS
     if job_input.get("epochs"):
         epochs = job_input.get("epochs")
-    
+
     # Check if an upload is in progress by looking for .tar.gz files or runpodctl receive processes
     upload_in_progress = False
     
@@ -426,6 +426,10 @@ def train_handler(job):
                 config = copy.deepcopy(base_config)
                 config["lora_rank"] = lora_rank
                 config["epochs"] = epoch
+
+                # For debug set epochs to 1
+                config["epochs"] = 1
+                config["lora_rank"] = 16
                 
                 # Update paths in the configuration
                 if "concepts" in config and len(config["concepts"]) > 0:
