@@ -21,12 +21,7 @@ UV_CMD = "uv run"
 # TCP server configuration
 TCP_HOST = '0.0.0.0'  # Listen on all interfaces
 TCP_PORT = 8080       # Port for TCP connection
-MAX_CLIENTS = 5       # Maximum number of concurrent clients
-
-
-# Path to the base configuration file
-BASE_CONFIG_PATH = COMFYUI_PATH + "/wf.json"
-
+MAX_CLIENTS = 20      # Maximum number of concurrent clients
 
 def receive_files_handler(job):
     """Endpoint to handle file receiving via runpodctl"""
