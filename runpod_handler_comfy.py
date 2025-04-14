@@ -11,6 +11,7 @@ import socket
 import threading
 import signal
 import sys
+import requests
 
 COMFYUI_PATH = "/workspace/ComfyUI"
 
@@ -127,11 +128,35 @@ def check_upload_handler(job):
             "message": f"Error checking files: {str(e)}"
         }
 
+def check_status_handler(job):
+    # Check if ComfyUI is able to receive commands using /system_stats
+    try:
+        response = requests.get("http://localhost:8188/system_stats")
+        if response.status_code == 200:
+            return {
+                "status": "success",
+                "ready": True,
+                "message": "ComfyUI is ready to receive commands"
+            }
+        else:
+            return {
+                "status": "error",
+                "ready": False,
+                "message": "ComfyUI is not ready to receive commands"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "ready": False,
+            "message": f"Error checking ComfyUI status: {str(e)}"
+        }
+
 # Map endpoints to handlers
 handlers = {
     "receive_files": receive_files_handler,
     "shutdown": shutdown_handler,
-    "check_upload": check_upload_handler
+    "check_upload": check_upload_handler,
+    "status": check_status_handler
 }
 
 # RunPod serverless handler
