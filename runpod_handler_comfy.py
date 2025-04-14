@@ -39,8 +39,9 @@ def receive_files_handler(job):
     # Start a background thread to receive the files
     def receive_files_in_background():
         try:
-            # Change directory to loras model directory
-            os.chdir(COMFYUI_PATH + "/models/loras")
+            os.chdir("/workspace")
+            # Create temp_input directory
+            os.makedirs("temp_input", exist_ok=True)
             
             # Run the receive command
             cmd = ["runpodctl", "receive", one_time_code]
@@ -70,6 +71,12 @@ def receive_files_handler(job):
                         os.rmdir("temp_bundle")
                         print("Moved contents from temp_bundle to input directory")
                     break
+                # If .safetensors file is found, move it to loras directory
+                if file.endswith(".safetensors"):
+                    shutil.move(file, COMFYUI_PATH + "/models/loras")
+                    print(f"Moved {file} to loras directory")
+                    break
+
         except Exception as e:
             print(f"Error receiving or extracting files: {e}")
     
