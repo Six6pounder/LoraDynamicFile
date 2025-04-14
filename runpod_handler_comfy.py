@@ -16,7 +16,7 @@ COMFYUI_PATH = "/workspace/ComfyUI"
 
 # Python executable path in the container
 PYTHON_CMD = "python"
-UV_CMD = "uv run"
+UV_CMD = "/workspace/ComfyUI/venv/bin/python"
 
 # TCP server configuration
 TCP_HOST = '0.0.0.0'  # Listen on all interfaces
