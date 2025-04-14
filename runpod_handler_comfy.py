@@ -45,7 +45,7 @@ def receive_files_handler(job):
             
             # Run the receive command
             cmd = ["runpodctl", "receive", one_time_code]
-            subprocess.run(cmd, check=True, timeout=600)
+            subprocess.run(cmd, check=True, timeout=1800)
             print(f"Files received successfully with code: {one_time_code}")
             
             # Find and extract the tar.gz file
