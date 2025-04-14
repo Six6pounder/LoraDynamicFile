@@ -231,26 +231,37 @@ def start_tcp_server(stop_event):
     finally:
         server.close()
 
+def start_comfyui():
+    try:
+        print("Starting ComfyUI...")
+        # Log that we're about to start ComfyUI
+        with open("/workspace/comfyui_startup.log", "w") as f:
+            f.write("Starting ComfyUI process\n")
+        subprocess.run([UV_CMD, "main.py", "--listen", "0.0.0.0"], cwd=COMFYUI_PATH, check=True)
+    except Exception as e:
+        print(f"Error starting ComfyUI: {e}")
+        # Log the error
+        with open("/workspace/comfyui_error.log", "w") as f:
+            f.write(f"Error starting ComfyUI: {e}\n")
+
 if __name__ == "__main__":
     # Create an event for signaling threads to stop
     stop_event = threading.Event()
+    
+    # Log that we're starting the handler
+    print(f"RunPod Handler starting from {os.getcwd()}...")
     
     # Start TCP server in a separate thread
     tcp_thread = threading.Thread(target=start_tcp_server, args=(stop_event,))
     tcp_thread.daemon = True
     tcp_thread.start()
+    print("TCP server thread started")
     
     # Start ComfyUI in a separate thread
-    def start_comfyui():
-        try:
-            print("Starting ComfyUI...")
-            subprocess.run([UV_CMD, "main.py", "--listen", "0.0.0.0"], cwd=COMFYUI_PATH, check=True)
-        except Exception as e:
-            print(f"Error starting ComfyUI: {e}")
-    
     comfyui_thread = threading.Thread(target=start_comfyui)
     comfyui_thread.daemon = True
     comfyui_thread.start()
+    print("ComfyUI thread started")
     
     # Run the handler
     try:
