@@ -151,12 +151,75 @@ def check_status_handler(job):
             "message": f"Error checking ComfyUI status: {str(e)}"
         }
 
+def check_lora_handler(job):
+    """Check if a specific LoRA model has been uploaded correctly"""
+    job_input = job["input"]
+    lora_name = job_input.get("lora_name")
+
+    if not lora_name:
+        return {
+            "status": "error",
+            "message": "No LoRA model name provided"
+        }
+
+    # Directory containing LoRA models
+    lora_dir = "/workspace/ComfyUI/models/loras"
+    
+    if not os.path.exists(lora_dir):
+        return {
+            "status": "error",
+            "message": "LoRA directory does not exist"
+        }
+    
+    # Check if the specific LoRA file exists
+    lora_path = os.path.join(lora_dir, lora_name)
+    if os.path.exists(lora_path):
+        # Get file size to verify it's not empty
+        file_size = os.path.getsize(lora_path)
+        
+        return {
+            "status": "success",
+            "message": f"LoRA model '{lora_name}' found with size {file_size} bytes",
+            "model_found": True,
+            "file_size": file_size
+        }
+    else:
+        # If the exact name wasn't found, check if there's a file that starts with the same name
+        # (in case the file was renamed during upload)
+        possible_matches = [f for f in os.listdir(lora_dir) if f.lower().startswith(lora_name.lower())]
+        
+        if possible_matches:
+            match_details = []
+            for match in possible_matches:
+                match_path = os.path.join(lora_dir, match)
+                match_size = os.path.getsize(match_path)
+                match_details.append({"name": match, "size": match_size})
+                
+            return {
+                "status": "success",
+                "message": f"Found {len(possible_matches)} similar LoRA models",
+                "model_found": True,
+                "similar_models": match_details
+            }
+        else:
+            # No matches found
+            # List all available LoRA models
+            available_models = os.listdir(lora_dir) if os.path.exists(lora_dir) else []
+            
+            return {
+                "status": "error",
+                "message": f"LoRA model '{lora_name}' not found",
+                "model_found": False,
+                "available_models": available_models[:20]  # Limit to first 20 to avoid huge responses
+            }
+
 # Map endpoints to handlers
 handlers = {
     "receive_files": receive_files_handler,
     "shutdown": shutdown_handler,
     "check_upload": check_upload_handler,
-    "status": check_status_handler
+    "status": check_status_handler,
+    "check_lora": check_lora_handler
 }
 
 # RunPod serverless handler
