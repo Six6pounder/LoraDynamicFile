@@ -39,7 +39,7 @@ def receive_files_handler(job):
     # Start a background thread to receive the files
     def receive_files_in_background():
         try:
-            
+            os.chdir("/workspace")
             # Create temp_input directory
             os.makedirs("temp_input", exist_ok=True)
             os.chdir("/workspace/temp_input")
