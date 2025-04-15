@@ -37,15 +37,35 @@ def receive_files_in_background(one_time_code):
     
     try:
         logging.info(f"[{thread_name}] Executing command: {' '.join(receive_cmd)}")
-        # Esegui il comando runpodctl
-        # Potresti voler catturare stdout/stderr per un debug più dettagliato:
-        # result = subprocess.run(receive_cmd, check=True, timeout=1800, capture_output=True, text=True)
-        # logging.info(f"[{thread_name}] runpodctl stdout: {result.stdout}")
-        # logging.error(f"[{thread_name}] runpodctl stderr: {result.stderr}") # Logga stderr anche in caso di successo se contiene warnings
         
-        # Versione semplice:
-        subprocess.run(receive_cmd, check=True, timeout=1800)
-        logging.info(f"[{thread_name}] runpodctl receive command completed successfully for code: {one_time_code}")
+        # Esegui il comando runpodctl in un processo separato e attendi il completamento
+        process = subprocess.Popen(receive_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Log del fatto che il processo è stato avviato
+        logging.info(f"[{thread_name}] runpodctl receive process started with PID: {process.pid}")
+        
+        # Attendi il completamento del processo con timeout
+        try:
+            stdout, stderr = process.communicate(timeout=1800)
+            exit_code = process.returncode
+            
+            # Log dell'output del processo
+            if stdout:
+                logging.info(f"[{thread_name}] runpodctl stdout: {stdout}")
+            if stderr:
+                logging.warning(f"[{thread_name}] runpodctl stderr: {stderr}")
+                
+            if exit_code != 0:
+                logging.error(f"[{thread_name}] runpodctl failed with exit code: {exit_code}")
+                return
+                
+            logging.info(f"[{thread_name}] runpodctl receive command completed successfully for code: {one_time_code}")
+        except subprocess.TimeoutExpired:
+            # Termina il processo se supera il timeout
+            process.kill()
+            stdout, stderr = process.communicate()
+            logging.error(f"[{thread_name}] runpodctl command timed out after 1800 seconds for code {one_time_code}.")
+            return
 
         # --- Inizio Post-Processing ---
         logging.info(f"[{thread_name}] Starting post-processing in directory: {current_dir}")
@@ -70,13 +90,6 @@ def receive_files_in_background(one_time_code):
         logging.info(f"[{thread_name}] Post-processing finished for code: {one_time_code}")
         # --- Fine Post-Processing ---
 
-    except subprocess.CalledProcessError as e:
-        logging.error(f"[{thread_name}] runpodctl command failed with return code {e.returncode} for code {one_time_code}.", exc_info=True)
-        # Se hai catturato l'output, loggalo:
-        # logging.error(f"[{thread_name}] runpodctl stdout: {e.stdout}")
-        # logging.error(f"[{thread_name}] runpodctl stderr: {e.stderr}")
-    except subprocess.TimeoutExpired:
-        logging.error(f"[{thread_name}] runpodctl command timed out after 1800 seconds for code {one_time_code}.", exc_info=True)
     except Exception as e:
         # Cattura qualsiasi altra eccezione imprevista durante l'intero processo
         logging.error(f"[{thread_name}] An unexpected error occurred during receive/processing for code {one_time_code}: {e}", exc_info=True) # exc_info=True aggiunge il traceback
