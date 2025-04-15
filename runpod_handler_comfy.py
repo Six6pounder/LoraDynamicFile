@@ -12,6 +12,7 @@ import threading
 import signal
 import sys
 import requests
+import hashlib
 
 COMFYUI_PATH = "/workspace/ComfyUI"
 
@@ -39,32 +40,66 @@ def monitor_and_move_lora_file():
         
         if os.path.exists(model_file_path):
             # File exists, check if it's being actively written
-            last_size = os.path.getsize(model_file_path)
-            print(f"Found model.safetensors with size: {last_size} bytes")
+            print(f"Found model.safetensors")
             
-            # Wait and check if the size is stable (indicating completed upload)
-            stable_count = 0
-            stable_threshold = 3  # Check 3 times (15 seconds total)
-            
-            while stable_count < stable_threshold:
-                time.sleep(5)
-                current_size = os.path.getsize(model_file_path)
-                
-                if current_size == last_size:
-                    stable_count += 1
-                    print(f"Size stable check {stable_count}/{stable_threshold}")
-                else:
-                    stable_count = 0
-                    print(f"Size changed from {last_size} to {current_size} bytes, resetting")
-                    last_size = current_size
-            
-            # File size is stable, move it
             try:
+                # Metodo più accurato: Calcolare un hash del file
+                # Se l'hash rimane costante per alcuni controlli consecutivi, significa che
+                # il file non sta più cambiando effettivamente.
+                
+                def get_file_hash(filepath):
+                    """Calcola l'hash SHA-256 del file"""
+                    try:
+                        # Apriamo in modalità binaria e leggiamo a blocchi per file grandi
+                        with open(filepath, 'rb') as f:
+                            sha256_hash = hashlib.sha256()
+                            for byte_block in iter(lambda: f.read(4096), b""):
+                                sha256_hash.update(byte_block)
+                            return sha256_hash.hexdigest()
+                    except Exception as e:
+                        print(f"Errore nel calcolo dell'hash: {e}")
+                        return None
+                
+                # Controlla stabilità dell'hash
+                stable_count = 0
+                stable_threshold = 3  # Controllo 3 volte (intervalli di 10 secondi)
+                last_hash = get_file_hash(model_file_path)
+                file_size = os.path.getsize(model_file_path)
+                print(f"File size: {file_size} bytes, Hash iniziale: {last_hash[:10]}...")
+                
+                while stable_count < stable_threshold:
+                    time.sleep(10)  # Intervallo più lungo per file grandi
+                    
+                    # Verifica il file lock
+                    try:
+                        # Prova ad aprire il file in modalità esclusiva
+                        # Se è ancora in uso da un altro processo, questo fallirà
+                        with open(model_file_path, 'rb+') as lock_test:
+                            current_hash = get_file_hash(model_file_path)
+                            current_size = os.path.getsize(model_file_path)
+                            
+                            if current_hash == last_hash and current_size == file_size:
+                                stable_count += 1
+                                print(f"Contenuto stabile: controllo {stable_count}/{stable_threshold}")
+                            else:
+                                stable_count = 0
+                                print(f"Contenuto cambiato, riavvio controllo")
+                                last_hash = current_hash
+                                file_size = current_size
+                    except IOError:
+                        # File ancora in uso da un altro processo
+                        print("File ancora in uso da un altro processo, attendo...")
+                        stable_count = 0
+                
+                # File è stabile, spostalo
                 destination = os.path.join(lora_dir, os.path.basename(model_file_path))
                 shutil.move(model_file_path, destination)
-                print(f"Successfully moved model.safetensors to {destination}")
+                print(f"File stabile per {stable_threshold * 10} secondi. Spostato in: {destination}")
+            
             except Exception as e:
-                print(f"Error moving model file: {e}")
+                print(f"Errore durante il monitoraggio o lo spostamento del file: {e}")
+                # Attendi prima di riprovare in caso di errore
+                time.sleep(30)
 
 def receive_files_handler(job):
     """Endpoint to handle file receiving via runpodctl"""
