@@ -39,24 +39,21 @@ def receive_files_handler(job):
     # Start a background thread to receive the files
     def receive_files_in_background():
         try:
-            os.chdir("/workspace")
-            # Create temp_input directory
-            os.makedirs("temp_input", exist_ok=True)
-            os.chdir("/workspace/temp_input")
             # Run the receive command
             cmd = ["runpodctl", "receive", one_time_code]
             subprocess.run(cmd, check=True, timeout=1800)
             print(f"Files received successfully with code: {one_time_code}")
-            
+            # If model.safetensors file is found, move it to loras directory
+            if os.path.exists("model.safetensors"):
+                shutil.move("model.safetensors", COMFYUI_PATH + "/models/loras")
+                print("Moved model.safetensors to loras directory")
             # Find and extract the tar.gz file
-            for file in os.listdir("."):
-                # If .safetensors file is found, move it to loras directory
-                if file.endswith(".safetensors"):
-                    shutil.move(file, COMFYUI_PATH + "/models/loras")
-                    print(f"Moved {file} to loras directory")
-                    break
-
-            os.chdir(COMFYUI_PATH)
+            # for file in os.listdir("."):
+            #     # If .safetensors file is found, move it to loras directory
+            #     if file.endswith(".safetensors"):
+            #         shutil.move(file, COMFYUI_PATH + "/models/loras")
+            #         print(f"Moved {file} to loras directory")
+            #         break
 
         except Exception as e:
             print(f"Error receiving or extracting files: {e}")
