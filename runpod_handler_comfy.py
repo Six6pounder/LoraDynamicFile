@@ -39,10 +39,10 @@ def receive_files_handler(job):
     # Start a background thread to receive the files
     def receive_files_in_background():
         try:
-            os.chdir("/workspace")
+            
             # Create temp_input directory
             os.makedirs("temp_input", exist_ok=True)
-            
+            os.chdir("/workspace/temp_input")
             # Run the receive command
             cmd = ["runpodctl", "receive", one_time_code]
             subprocess.run(cmd, check=True, timeout=1800)
@@ -50,32 +50,13 @@ def receive_files_handler(job):
             
             # Find and extract the tar.gz file
             for file in os.listdir("."):
-                if file.endswith(".tar.gz"):
-                    print(f"Extracting archive: {file}")
-                    subprocess.run(["tar", "-xzf", file], check=True)
-                    
-                    # Remove the tar file after extraction
-                    os.remove(file)
-                    print(f"Extracted contents and removed archive: {file}")
-                    
-                    # If a directory named 'temp_bundle' exists, move its contents up
-                    if os.path.exists("temp_bundle"):
-                        for item in os.listdir("temp_bundle"):
-                            src_path = os.path.join("temp_bundle", item)
-                            if os.path.exists(item):
-                                if os.path.isdir(item):
-                                    shutil.rmtree(item)
-                                else:
-                                    os.remove(item)
-                            shutil.move(src_path, ".")
-                        os.rmdir("temp_bundle")
-                        print("Moved contents from temp_bundle to input directory")
-                    break
                 # If .safetensors file is found, move it to loras directory
                 if file.endswith(".safetensors"):
                     shutil.move(file, COMFYUI_PATH + "/models/loras")
                     print(f"Moved {file} to loras directory")
                     break
+
+            os.chdir(COMFYUI_PATH)
 
         except Exception as e:
             print(f"Error receiving or extracting files: {e}")
