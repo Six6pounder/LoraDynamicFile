@@ -12,10 +12,6 @@ import threading
 import signal
 import sys
 import requests
-import logging
-
-# Configura un logger di base (potresti volerlo più avanzato)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
 
 COMFYUI_PATH = "/workspace/ComfyUI"
 
@@ -28,88 +24,83 @@ TCP_HOST = '0.0.0.0'  # Listen on all interfaces
 TCP_PORT = 8080       # Port for TCP connection
 MAX_CLIENTS = 20      # Maximum number of concurrent clients
 
-def receive_files_in_background(one_time_code):
-    """Task in background per ricevere file e processarli."""
-    thread_name = threading.current_thread().name
-    logging.info(f"[{thread_name}] Starting file receive task with code: {one_time_code}")
-    receive_cmd = ["runpodctl", "receive", one_time_code]
-    current_dir = os.getcwd() # Directory corrente dove runpodctl scarica i file
+def monitor_and_move_lora_file():
+    """Monitor for model.safetensors file and move it to loras directory when fully uploaded"""
+    model_file_path = "model.safetensors"
+    lora_dir = os.path.join(COMFYUI_PATH, "models/loras")
     
-    try:
-        logging.info(f"[{thread_name}] Executing command: {' '.join(receive_cmd)}")
+    # Ensure lora directory exists
+    os.makedirs(lora_dir, exist_ok=True)
+    
+    print("Starting file monitor for model.safetensors...")
+    
+    while True:
+        time.sleep(5)  # Check every 5 seconds
         
-        # Esegui il comando runpodctl in un processo separato e attendi il completamento
-        process = subprocess.Popen(receive_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        # Log del fatto che il processo è stato avviato
-        logging.info(f"[{thread_name}] runpodctl receive process started with PID: {process.pid}")
-        
-        # Attendi il completamento del processo con timeout
-        try:
-            stdout, stderr = process.communicate(timeout=1800)
-            exit_code = process.returncode
+        if os.path.exists(model_file_path):
+            # File exists, check if it's being actively written
+            last_size = os.path.getsize(model_file_path)
+            print(f"Found model.safetensors with size: {last_size} bytes")
             
-            # Log dell'output del processo
-            if stdout:
-                logging.info(f"[{thread_name}] runpodctl stdout: {stdout}")
-            if stderr:
-                logging.warning(f"[{thread_name}] runpodctl stderr: {stderr}")
+            # Wait and check if the size is stable (indicating completed upload)
+            stable_count = 0
+            stable_threshold = 3  # Check 3 times (15 seconds total)
+            
+            while stable_count < stable_threshold:
+                time.sleep(5)
+                current_size = os.path.getsize(model_file_path)
                 
-            if exit_code != 0:
-                logging.error(f"[{thread_name}] runpodctl failed with exit code: {exit_code}")
-                return
-                
-            logging.info(f"[{thread_name}] runpodctl receive command completed successfully for code: {one_time_code}")
-        except subprocess.TimeoutExpired:
-            # Termina il processo se supera il timeout
-            process.kill()
-            stdout, stderr = process.communicate()
-            logging.error(f"[{thread_name}] runpodctl command timed out after 1800 seconds for code {one_time_code}.")
-            return
-
-        # --- Inizio Post-Processing ---
-        logging.info(f"[{thread_name}] Starting post-processing in directory: {current_dir}")
-
-        # Sposta model.safetensors se esiste
-        source_model_path = os.path.join(current_dir, "model.safetensors")
-        loras_dir = os.path.join(COMFYUI_PATH, "models", "loras")
-        target_model_path = os.path.join(loras_dir, "model.safetensors") # O usa il nome originale se preferisci
-
-        if os.path.exists(source_model_path):
-            logging.info(f"[{thread_name}] Found '{source_model_path}'. Attempting to move to '{loras_dir}'")
+                if current_size == last_size:
+                    stable_count += 1
+                    print(f"Size stable check {stable_count}/{stable_threshold}")
+                else:
+                    stable_count = 0
+                    print(f"Size changed from {last_size} to {current_size} bytes, resetting")
+                    last_size = current_size
+            
+            # File size is stable, move it
             try:
-                # Assicurati che la directory di destinazione esista
-                os.makedirs(loras_dir, exist_ok=True)
-                shutil.move(source_model_path, target_model_path)
-                logging.info(f"[{thread_name}] Successfully moved '{source_model_path}' to '{target_model_path}'")
-            except Exception as move_error:
-                logging.error(f"[{thread_name}] Failed to move '{source_model_path}': {move_error}", exc_info=True)
-        else:
-            logging.warning(f"[{thread_name}] File '{source_model_path}' not found after runpodctl finished.")
+                destination = os.path.join(lora_dir, os.path.basename(model_file_path))
+                shutil.move(model_file_path, destination)
+                print(f"Successfully moved model.safetensors to {destination}")
+            except Exception as e:
+                print(f"Error moving model file: {e}")
 
-        logging.info(f"[{thread_name}] Post-processing finished for code: {one_time_code}")
-        # --- Fine Post-Processing ---
-
-    except Exception as e:
-        # Cattura qualsiasi altra eccezione imprevista durante l'intero processo
-        logging.error(f"[{thread_name}] An unexpected error occurred during receive/processing for code {one_time_code}: {e}", exc_info=True) # exc_info=True aggiunge il traceback
-
-# Modifica receive_files_handler per usare la nuova funzione
 def receive_files_handler(job):
     """Endpoint to handle file receiving via runpodctl"""
     job_input = job["input"]
+
+    # Get the one-time code for receiving files
     one_time_code = job_input.get("one_time_code")
     if not one_time_code:
-        return {"status": "error", "message": "No one-time code provided"}
+        return {
+            "status": "error",
+            "message": "No one-time code provided for file transfer"
+        }
+    
+    # Start a background thread to receive the files
+    def receive_files_in_background():
+        try:
+            # Run the receive command
+            cmd = ["runpodctl", "receive", one_time_code]
+            subprocess.run(cmd, check=True, timeout=1800)
+            print(f"Files received successfully with code: {one_time_code}")
+            
+            # Non è più necessario controllare e spostare il file qui poiché lo fa
+            # il monitor in background
 
-    # Avvia il thread in background passando il codice
-    thread = threading.Thread(target=receive_files_in_background, args=(one_time_code,), name=f"Receive-{one_time_code}")
-    thread.daemon = True # Permette al programma principale di uscire anche se questo thread è in esecuzione
+        except Exception as e:
+            print(f"Error receiving or extracting files: {e}")
+    
+    # Start background thread
+    thread = threading.Thread(target=receive_files_in_background)
+    thread.daemon = True
     thread.start()
     
+    # Return immediately to avoid blocking
     return {
         "status": "success",
-        "message": f"File transfer initiated with code: {one_time_code}. Processing continues in background. Check logs for details."
+        "message": f"File transfer initiated with code: {one_time_code}. Transfer will continue in background. Old files will be deleted."
     }
 
 def shutdown_handler(job):
@@ -366,6 +357,12 @@ if __name__ == "__main__":
     
     # Log that we're starting the handler
     print(f"RunPod Handler starting from {os.getcwd()}...")
+    
+    # Start the file monitor thread
+    monitor_thread = threading.Thread(target=monitor_and_move_lora_file)
+    monitor_thread.daemon = True
+    monitor_thread.start()
+    print("File monitor thread started")
     
     # Start TCP server in a separate thread
     tcp_thread = threading.Thread(target=start_tcp_server, args=(stop_event,))
