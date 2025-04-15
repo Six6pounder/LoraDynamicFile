@@ -39,24 +39,56 @@ def receive_files_handler(job):
     # Start a background thread to receive the files
     def receive_files_in_background():
         try:
+            # Ottieni la directory corrente per poterci tornare dopo
+            current_dir = os.getcwd()
+            print(f"Directory corrente: {current_dir}")
+            
             # Run the receive command
+            print(f"Avvio comando di ricezione file con codice: {one_time_code}")
             cmd = ["runpodctl", "receive", one_time_code]
-            subprocess.run(cmd, check=True, timeout=1800)
-            print(f"Files received successfully with code: {one_time_code}")
-            # If model.safetensors file is found, move it to loras directory
+            result = subprocess.run(cmd, check=True, timeout=1800, capture_output=True)
+            print(f"Trasferimento completato con codice di uscita: {result.returncode}")
+            print(f"Output comando: {result.stdout.decode('utf-8', errors='ignore')}")
+            
+            # Assicuriamoci di essere nella directory corretta
+            os.chdir(current_dir)
+            
+            # Verifica se il file model.safetensors esiste e spostalo
+            print(f"Controllo file in: {os.getcwd()}")
+            files_in_dir = os.listdir(".")
+            print(f"File trovati: {files_in_dir}")
+            
+            lora_dir = COMFYUI_PATH + "/models/loras"
+            # Crea la directory se non esiste
+            os.makedirs(lora_dir, exist_ok=True)
+            
+            # If model.safetensors file is found, move it to loras directory
             if os.path.exists("model.safetensors"):
-                shutil.move("model.safetensors", COMFYUI_PATH + "/models/loras")
-                print("Moved model.safetensors to loras directory")
-            # Find and extract the tar.gz file
-            # for file in os.listdir("."):
-            #     # If .safetensors file is found, move it to loras directory
-            #     if file.endswith(".safetensors"):
-            #         shutil.move(file, COMFYUI_PATH + "/models/loras")
-            #         print(f"Moved {file} to loras directory")
-            #         break
+                print("model.safetensors trovato, spostamento in corso...")
+                shutil.move("model.safetensors", lora_dir)
+                print(f"Spostato model.safetensors in {lora_dir}")
+            else:
+                print("File model.safetensors non trovato nella directory corrente")
+            
+            # Controlla anche altri file .safetensors
+            for file in files_in_dir:
+                if file.endswith(".safetensors"):
+                    print(f"Trovato file safetensors: {file}")
+                    try:
+                        shutil.move(file, lora_dir)
+                        print(f"Spostato {file} nella directory loras")
+                    except Exception as move_err:
+                        print(f"Errore nello spostamento di {file}: {move_err}")
 
+        except subprocess.TimeoutExpired:
+            print(f"Timeout durante la ricezione dei file dopo 1800 secondi")
+        except subprocess.CalledProcessError as e:
+            print(f"Errore nel comando di ricezione: {e}")
+            print(f"Output errore: {e.stderr.decode('utf-8', errors='ignore') if e.stderr else 'Nessun output di errore'}")
         except Exception as e:
-            print(f"Error receiving or extracting files: {e}")
+            print(f"Errore durante la ricezione o estrazione dei file: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Start background thread
     thread = threading.Thread(target=receive_files_in_background)
