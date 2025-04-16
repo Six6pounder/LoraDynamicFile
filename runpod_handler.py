@@ -290,9 +290,8 @@ def receive_files_handler(job):
                         config["lora_rank"] = lora_rank
                         config["epochs"] = epoch
 
-                        # For debug set epochs to 1
-                        config["epochs"] = 1
-                        config["lora_rank"] = 16
+                        config["epochs"] = 200
+                        config["lora_rank"] = 64
                         
                         # Update paths in the configuration
                         if "concepts" in config and len(config["concepts"]) > 0:
