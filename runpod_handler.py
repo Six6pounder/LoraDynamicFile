@@ -17,6 +17,7 @@ ONETRAINER_PATH = "/workspace/OneTrainer"
 
 # Python executable path in the container
 PYTHON_CMD = "python"
+UV_CMD = "/workspace/OneTrainer/venv/bin/python"
 
 # Default ranks and epochs - can be overridden in the request
 DEFAULT_LORA_RANKS = [64]
@@ -42,7 +43,7 @@ BASE_CONFIG_PATH = "/workspace/lora_training_config_example.json"
 def generate_captions(directory, caption_prefix):
     """Generate captions for images in the directory"""
     subprocess.run([
-        PYTHON_CMD,
+        UV_CMD,
         os.path.join(ONETRAINER_PATH, "scripts", "generate_captions.py"),
         "--model", "BLIP",
         "--sample-dir", directory,
@@ -54,7 +55,7 @@ def generate_captions(directory, caption_prefix):
 def generate_masks(directory):
     """Generate masks for images in the directory"""
     subprocess.run([
-        PYTHON_CMD,
+        UV_CMD,
         os.path.join(ONETRAINER_PATH, "scripts", "generate_masks.py"),
         "--model", "CLIPSEG",
         "--sample-dir", directory,
@@ -68,7 +69,7 @@ def generate_masks(directory):
 def generate_loras(config_path):
     """Train a LoRA model with the given configuration"""
     subprocess.run([
-        PYTHON_CMD,
+        UV_CMD,
         os.path.join(ONETRAINER_PATH, "scripts", "train.py"),
         "--config-path", config_path
     ], cwd=ONETRAINER_PATH)
